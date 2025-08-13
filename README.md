@@ -90,9 +90,7 @@ This project successfully implements:
 
 ---
 
-## 🚀 How to Run
-
-1. Clone the repository:  
-```bash
-git clone https://github.com/amitpanchal319/Food_Wastage_Management_Tracker.git
-cd food-wastage-management
+## 📧 Contact
+Amit Panchal
+Email: amitpanchal0319@gmail.com
+LinkedIn: https://www.linkedin.com/in/amit-panchal0319/
