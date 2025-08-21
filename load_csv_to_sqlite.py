@@ -1,14 +1,16 @@
 import sqlite3
 import pandas as pd
+import os
 
 # ====== Paths to your CSVs ======
-providers_csv = r"E:\Laptop Data\Amit Panchal\Internship Projects\Food Wastage\data\providers_data.csv"
-receivers_csv = r"E:\Laptop Data\Amit Panchal\Internship Projects\Food Wastage\data\receivers_data.csv"
-food_listings_csv = r"E:\Laptop Data\Amit Panchal\Internship Projects\Food Wastage\data\food_listings_data.csv"
-claims_csv = r"E:\Laptop Data\Amit Panchal\Internship Projects\Food Wastage\data\claims_data.csv"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+providers_csv = os.path.join(BASE_DIR, "data", "providers_data.csv")
+receivers_csv = os.path.join(BASE_DIR, "data", "receivers_data.csv")
+food_listings_csv = os.path.join(BASE_DIR, "data", "food_listings_data.csv")
+claims_csv = os.path.join(BASE_DIR, "data", "claims_data.csv")
 
 # ====== Output DB file ======
-db_file = "food_wastage.db"
+db_file = os.path.join(BASE_DIR, "food_wastage.db")
 
 # ====== Create schema ======
 schema_sql = """
@@ -55,18 +57,47 @@ CREATE TABLE IF NOT EXISTS claims (
 );
 """
 
-# ====== Create DB and load CSV data ======
-con = sqlite3.connect(db_file)
-cur = con.cursor()
-cur.executescript(schema_sql)
+def build_db(force=False):
+    """Create and populate database if not exists or if force=True"""
+    if os.path.exists(db_file) and not force:
+        return db_file  # DB already exists
 
-# Load CSVs into tables
-pd.read_csv(providers_csv).to_sql("providers", con, if_exists="append", index=False)
-pd.read_csv(receivers_csv).to_sql("receivers", con, if_exists="append", index=False)
-pd.read_csv(food_listings_csv).to_sql("food_listings", con, if_exists="append", index=False)
-pd.read_csv(claims_csv).to_sql("claims", con, if_exists="append", index=False)
+    con = sqlite3.connect(db_file)
+    cur = con.cursor()
+    cur.executescript(schema_sql)
 
-con.commit()
-con.close()
+    # ---- Clear old rows (but keep schema) ----
+    for table in ["claims", "food_listings", "providers", "receivers"]:
+        cur.execute(f"DELETE FROM {table};")
 
-print(f"Database created: {db_file}")
+    # ---- Insert fresh CSV data ----
+    providers_df = pd.read_csv(providers_csv)
+    receivers_df = pd.read_csv(receivers_csv)
+    food_df = pd.read_csv(food_listings_csv)
+    claims_df = pd.read_csv(claims_csv)
+
+    # Insert providers, receivers, food listings first
+    providers_df.to_sql("providers", con, if_exists="append", index=False)
+    receivers_df.to_sql("receivers", con, if_exists="append", index=False)
+    food_df.to_sql("food_listings", con, if_exists="append", index=False)
+
+    # ---- Validate claims foreign keys ----
+    valid_claims = claims_df[
+        claims_df["Receiver_ID"].isin(receivers_df["Receiver_ID"]) &
+        claims_df["Food_ID"].isin(food_df["Food_ID"])
+    ]
+
+    if len(valid_claims) < len(claims_df):
+        print(f"⚠ Skipped {len(claims_df) - len(valid_claims)} invalid claim rows (foreign key mismatch)")
+
+    valid_claims.to_sql("claims", con, if_exists="append", index=False)
+
+    con.commit()
+    con.close()
+    return db_file
+
+
+if __name__ == "__main__":
+    print("Rebuilding database...")
+    build_db(force=True)
+    print(f"Database created at {db_file}")

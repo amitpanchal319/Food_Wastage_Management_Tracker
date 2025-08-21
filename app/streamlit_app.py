@@ -4,7 +4,23 @@ import streamlit as st
 import altair as alt
 from datetime import datetime, timedelta
 
+import sys, os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from load_csv_to_sqlite import build_db
+
+DB_FILE = build_db()  # ensures DB exists before connecting
+
+
+
 DB_FILE = "food_wastage.db"
+
+
+import os
+from load_csv_to_sqlite import build_db
+
+if not os.path.exists(DB_FILE):
+    build_db()
 
 # ---------------- Database Connection ----------------
 @st.cache_resource
@@ -71,6 +87,7 @@ query += " ORDER BY date(Expiry_Date) ASC, Quantity DESC"
 listings_df = run_query(con, query, params)
 
 # --- Expiry Alert ---
+# --- Expiry Alert ---
 today = datetime.now().date()
 soon_limit = today + timedelta(days=2)
 
@@ -78,22 +95,27 @@ def get_expiry_status(exp_date_str):
     try:
         exp_date = pd.to_datetime(exp_date_str).date()
         if exp_date == today:
-            return "⚠ Expiring Today", '#ff4d4d'
+            return ("⚠ Expiring Today", "#ff4d4d")
         elif today < exp_date <= soon_limit:
-            return "⚠ Expiring Soon", '#ffcccc'
+            return ("⚠ Expiring Soon", "#ffcccc")
         else:
-            return "", ''
+            return ("", "")
     except:
-        return "", ''
+        return ("", "")
 
-listings_df[['Expiry Alert', 'Color']] = listings_df['Expiry_Date'].apply(lambda x: pd.Series(get_expiry_status(x)))
+# safely split into two new columns
+expiry_info = listings_df["Expiry_Date"].apply(get_expiry_status)
+listings_df["Expiry Alert"] = expiry_info.apply(lambda x: x[0])
+listings_df["Color"] = expiry_info.apply(lambda x: x[1])
 
 def highlight_row(row):
-    if row['Color']:
-        return ['background-color: ' + row['Color']] * len(row)
-    return [''] * len(row)
+    if row["Color"]:
+        return ["background-color: " + row["Color"]] * len(row)
+    return [""] * len(row)
 
 st.dataframe(listings_df.style.apply(highlight_row, axis=1), use_container_width=True)
+
+
 
 # ---------------- Provider Contacts ----------------
 st.subheader("Provider Contacts")
